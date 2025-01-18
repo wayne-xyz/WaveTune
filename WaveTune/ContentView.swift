@@ -44,8 +44,8 @@ struct SineWaveView: View {
             Picker("Duration", selection: $duration) {
                 Text("5s").tag(5.0)
                 Text("10s").tag(10.0)
-                Text("15s").tag(15.0)
-                Text("20s").tag(20.0)
+                Text("60s").tag(60.0)
+                Text("120s").tag(120.0)
             }
             .pickerStyle(.segmented)
             .padding()
@@ -74,70 +74,6 @@ struct SineWaveView: View {
             print( " Ui appeared")
             
         }
-    }
-}
-
-class AudioEngine {
-    private var audioEngine: AVAudioEngine
-    private var player: AVAudioPlayerNode
-    private var mixer: AVAudioMixerNode
-    
-    init() {
-        // Setup Audio Session for both play and record
-        do {
-            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: .defaultToSpeaker)
-            try AVAudioSession.sharedInstance().setActive(true)
-        } catch {
-            print("Audio session setup failed: \(error)")
-        }
-        
-        audioEngine = AVAudioEngine()
-        player = AVAudioPlayerNode()
-        mixer = audioEngine.mainMixerNode
-        
-        audioEngine.attach(player)
-        audioEngine.connect(player, to: mixer, format: mixer.outputFormat(forBus: 0))
-        
-        try? audioEngine.start()
-    }
-    
-    func playSineWaveSweep(duration: Double, completion: @escaping () -> Void) {
-        let sampleRate = 44100.0
-        let startFrequency: Double = 20.0  // Start at 20 Hz
-        let endFrequency: Double = 20000.0  // End at 20 kHz
-        
-        let numberOfSamples = Int(duration * sampleRate)
-        var audioData = [Float]()
-        
-        for i in 0..<numberOfSamples {
-            let progress = Double(i) / Double(numberOfSamples)
-            let time = Double(i) / sampleRate
-            
-            // First half: frequency goes up
-            // Second half: frequency goes down
-            let frequency = progress < 0.5 ?
-                startFrequency + (endFrequency - startFrequency) * (progress * 2) :
-                endFrequency - (endFrequency - startFrequency) * ((progress - 0.5) * 2)
-            
-            let value = sin(2.0 * .pi * frequency * time)
-            audioData.append(Float(value))
-        }
-        
-        let buffer = AVAudioPCMBuffer(pcmFormat: mixer.outputFormat(forBus: 0),
-                                    frameCapacity: AVAudioFrameCount(numberOfSamples))!
-        buffer.frameLength = AVAudioFrameCount(numberOfSamples)
-        
-        let channelData = buffer.floatChannelData?[0]
-        for i in 0..<numberOfSamples {
-            channelData?[i] = audioData[i]
-        }
-        
-        player.scheduleBuffer(buffer, at: nil, options: .interrupts) {
-            DispatchQueue.main.async {
-                completion()
-            }
-        }
-        player.play()
     }
 }
 
