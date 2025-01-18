@@ -69,6 +69,11 @@ struct SineWaveView: View {
             
             Spacer()
         }
+        .onAppear {
+            // Ensure microphone permission is requested
+            print( " Ui appeared")
+            
+        }
     }
 }
 
@@ -78,6 +83,14 @@ class AudioEngine {
     private var mixer: AVAudioMixerNode
     
     init() {
+        // Setup Audio Session for both play and record
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: .defaultToSpeaker)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("Audio session setup failed: \(error)")
+        }
+        
         audioEngine = AVAudioEngine()
         player = AVAudioPlayerNode()
         mixer = audioEngine.mainMixerNode
@@ -91,7 +104,7 @@ class AudioEngine {
     func playSineWaveSweep(duration: Double, completion: @escaping () -> Void) {
         let sampleRate = 44100.0
         let startFrequency: Double = 20.0  // Start at 20 Hz
-        let endFrequency: Double = 2000.0  // End at 2 kHz
+        let endFrequency: Double = 20000.0  // End at 20 kHz
         
         let numberOfSamples = Int(duration * sampleRate)
         var audioData = [Float]()
