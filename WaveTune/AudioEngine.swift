@@ -4,6 +4,12 @@ class AudioEngine {
     private var audioEngine: AVAudioEngine
     private var player: AVAudioPlayerNode
     private var mixer: AVAudioMixerNode
+    private var displayLink: CADisplayLink?
+    private var startTime: TimeInterval = 0
+    private var currentDuration: Double = 0
+    private var currentLowFreq: Double = 20.0
+    private var currentHighFreq: Double = 20000.0
+    private var frequencyCallback: ((Double) -> Void)?
     
     init() {
         // Setup Audio Session for both play and record
@@ -24,41 +30,75 @@ class AudioEngine {
         try? audioEngine.start()
     }
     
-    func playSineWaveSweep(duration: Double, completion: @escaping () -> Void) {
+    @objc private func updateFrequencyDisplay() {
+        guard let callback = frequencyCallback else { return }
+        let elapsed = CACurrentMediaTime() - startTime
+        let progress = elapsed / currentDuration
+        
+        if progress <= 1.0 {
+            let frequency = currentLowFreq + ( currentHighFreq - currentLowFreq ) * Double(progress)
+            callback(frequency)
+        }
+    }
+    
+    func playSineWaveSweep(
+        duration: Double,
+        lowFrequency: Double = 20.0,
+        highFrequency: Double = 20000.0,
+        frequencyUpdate: @escaping (Double) -> Void,
+        completion: @escaping () -> Void
+    ) {
+        currentDuration = duration
+        currentLowFreq = lowFrequency
+        currentHighFreq = highFrequency
+        frequencyCallback = frequencyUpdate
+        
         let sampleRate = 48000.0
-        let lowFrequency: Double = 20.0  // Low value 20 Hz
-        let highFrequency: Double = 20000.0  // High value 20 kHz
+        let silenceDuration = 0.025 // 25ms silence padding
         
-        // Calculate total samples for the full duration
-        let totalSamples = Int(duration * sampleRate)
+        let silenceSamples = Int(silenceDuration * sampleRate)
+        let sweepSamples = Int(duration * sampleRate)
+        let totalSamples = sweepSamples + (2 * silenceSamples)
         
-        // Create single buffer for the full sweep
         let buffer = AVAudioPCMBuffer(pcmFormat: mixer.outputFormat(forBus: 0),
                                     frameCapacity: AVAudioFrameCount(totalSamples))!
         buffer.frameLength = AVAudioFrameCount(totalSamples)
         
         let channelData = buffer.floatChannelData?[0]
-        for i in 0..<totalSamples {
-            let time = Double(i) / sampleRate
-            let progress = time / duration
-            let frequency = lowFrequency + (highFrequency - lowFrequency) * progress
-            let value = sin(2.0 * .pi * frequency * time)
-            channelData?[i] = Float(value)
+        
+        // Add initial silence
+        for i in 0..<silenceSamples {
+            channelData?[i] = 0.0
         }
         
-  
+        // Generate sweep
+        for i in 0..<sweepSamples {
+            let time = Double(i) / sampleRate
+            let progress = time / duration
+            let frequency = lowFrequency + (highFrequency - lowFrequency) * progress  // Linear sweep
+            let value = sin(2 * .pi * frequency * time)
+            channelData?[i + silenceSamples] = Float(value)
+        }
         
-        // Schedule the single buffer with completion handler
+        // Add ending silence
+        for i in 0..<silenceSamples {
+            channelData?[i + silenceSamples + sweepSamples] = 0.0
+        }
+        
+        // Setup display link for frequency updates
+        displayLink = CADisplayLink(target: self, selector: #selector(updateFrequencyDisplay))
+        displayLink?.add(to: .main, forMode: .common)
+        startTime = CACurrentMediaTime()
+        
         player.scheduleBuffer(buffer, at: nil, options: []) {
             DispatchQueue.main.async {
-                print("Sweep completed")
+                self.displayLink?.invalidate()
+                self.displayLink = nil
+                self.frequencyCallback = nil
                 completion()
             }
         }
         
         player.play()
     }
-    
-    
-
 }
